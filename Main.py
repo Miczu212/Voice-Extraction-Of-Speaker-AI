@@ -1,60 +1,26 @@
-import sounddevice as sd
-import numpy as np
-import threading
-import queue
+from pyannote_onnx import PyannoteONNX
 
-SR = 48000
-BLOCK = 1024
-CHANNELS = 1
+# Sprawdź co zwracają różne metody
+diarization = PyannoteONNX(model_name='segmentation-3.0')
 
-audio_queue = queue.Queue(maxsize=10)
+print("=== DEBUG: METODY I ZWRACANE WARTOŚCI ===")
 
-def record_audio(input_device):
-    def callback(indata, frames, time, status):
-        if status:
-            print("Input status:", status)
-        audio_queue.put(indata.copy())
+# Test różnych metod
+methods_to_test = [
+    ('itertracks', lambda: list(diarization.itertracks("test_audio.wav", onset=0.5, offset=0.5))),
+]
 
-    with sd.InputStream(device=input_device,
-                        samplerate=SR,
-                        channels=CHANNELS,
-                        blocksize=BLOCK,
-                        dtype='float32',
-                        callback=callback):
-        print("[REC] Recording started")
-        threading.Event().wait()  # działa w nieskończoność
-
-def play_audio(output_device):
-    def callback(outdata, frames, time, status):
-        if status:
-            print("Output status:", status)
-        try:
-            data = audio_queue.get_nowait()
-        except queue.Empty:
-            data = np.zeros((frames, CHANNELS), dtype=np.float32)
-        outdata[:] = data
-
-    with sd.OutputStream(device=output_device,
-                         samplerate=SR,
-                         channels=CHANNELS,
-                         blocksize=BLOCK,
-                         dtype='float32',
-                         callback=callback):
-        print("[PLAY] Playback started")
-        threading.Event().wait()
-
-if __name__ == "__main__":
-    print(sd.query_devices())
-
-    input_device = 1 #python -m sounddevice i wybrac mikrofon i słuchawki/głosniki pasujace
-    output_device = 4
-
-    threading.Thread(target=record_audio, args=(input_device,), daemon=True).start()
-    threading.Thread(target=play_audio, args=(output_device,), daemon=True).start()
-
-    print("Strumień działa — mikrofon → głośniki. Naciśnij cokolwiek, żeby zakończyć.")
+for method_name, method_call in methods_to_test:
     try:
-        while True:
-            pass
-    except KeyboardInterrupt:
-        print("Koniec")
+        print(f"\n--- Testing {method_name} ---")
+        result = method_call()
+        if result:
+            first_item = result[0]
+            print(f"Typ: {type(first_item)}")
+            print(f"Zawartość: {first_item}")
+            print(f"Liczba elementów: {len(first_item)}")
+            print(f"Pierwsze 3 elementy: {result[:3]}")
+        else:
+            print("Brak wyników")
+    except Exception as e:
+        print(f"Błąd: {e}")
